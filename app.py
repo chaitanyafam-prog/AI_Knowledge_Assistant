@@ -17,8 +17,8 @@ from rag_chain import RETRIEVAL_VERSION, VectorRAGChain
 from supabase import create_client
 
 # 1. Look for keys in Streamlit Secrets (Production) first, fall back to environment variables (Local)
-SUPABASE_URL = st.secrets.get("SUPABASE_URL") or os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = st.secrets.get("SUPABASE_KEY") or os.environ.get("SUPABASE_KEY")
+SUPABASE_URL = st.secrets.get("SUPABASE_URL") 
+SUPABASE_KEY = st.secrets.get("SUPABASE_KEY") 
 
 # 2. Verify that credentials actually exist
 if not SUPABASE_URL or not SUPABASE_KEY:
