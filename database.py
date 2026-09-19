@@ -5,9 +5,33 @@ import os
 from dotenv import load_dotenv
 from supabase import create_client
 
+try:
+    import streamlit as st
+except ImportError:
+    st = None
+
 load_dotenv()
-SUPABASE_URL = os.getenv("SUPABASE_URL") or os.getenv("NEXT_PUBLIC_SUPABASE_URL")
-SUPABASE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY") or os.getenv("NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY")
+
+
+def _get_config(*keys: str) -> str | None:
+    """Return the first non-empty value found for any of the given key names,
+    checking Streamlit Secrets first, then environment variables (.env locally)."""
+    for key in keys:
+        if st is not None:
+            try:
+                value = st.secrets.get(key)
+                if value:
+                    return value
+            except Exception:
+                pass
+        value = os.getenv(key)
+        if value:
+            return value
+    return None
+
+
+SUPABASE_URL = _get_config("SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_URL")
+SUPABASE_KEY = _get_config("SUPABASE_PUBLISHABLE_KEY", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "SUPABASE_KEY")
 
 def is_configured() -> bool:
     return bool(SUPABASE_URL and SUPABASE_KEY)
