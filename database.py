@@ -15,11 +15,22 @@ load_dotenv()
 
 def _get_config(*keys: str) -> str | None:
     """Return the first non-empty value found for any of the given key names,
-    checking Streamlit Secrets first, then environment variables (.env locally)."""
+    checking Streamlit Secrets first, then environment variables (.env locally).
+
+    Streamlit Cloud accepts root-level secrets, while this project stores them
+    locally under ``[connections.supabase]``. Support both layouts.
+    """
     for key in keys:
         if st is not None:
             try:
                 value = st.secrets.get(key)
+                if value:
+                    return value
+            except Exception:
+                pass
+            try:
+                connection = st.secrets.get("connections", {}).get("supabase", {})
+                value = connection.get(key)
                 if value:
                     return value
             except Exception:

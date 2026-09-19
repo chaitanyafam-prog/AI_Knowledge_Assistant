@@ -14,20 +14,6 @@ from ingest import DATA_DIR, chunk_documents, embed_and_store, load_pdf, remove_
 from rag_chain import RETRIEVAL_VERSION, VectorRAGChain
 
 
-from supabase import create_client
-
-# 1. Look for keys in Streamlit Secrets (Production) first, fall back to environment variables (Local)
-SUPABASE_URL = st.secrets.get("SUPABASE_URL") 
-SUPABASE_KEY = st.secrets.get("SUPABASE_KEY") 
-
-# 2. Verify that credentials actually exist
-if not SUPABASE_URL or not SUPABASE_KEY:
-    st.error("🔒 Supabase credentials are missing. Please configure them in your settings.")
-    st.stop()  # Safely halts the app instead of crashing completely
-
-# 3. Initialize client
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
-
 load_dotenv()
 st.set_page_config(page_title="Mini AI Knowledge Assistant", page_icon="📚", layout="wide")
 st.title("📚 Mini AI Knowledge Assistant")
