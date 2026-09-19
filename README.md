@@ -1,65 +1,107 @@
-# Mini AI Knowledge Assistant (RAG)
+# Mini AI Knowledge Assistant
 
-A simple RAG-based application that answers questions grounded in a provided
-set of documents.
+A Streamlit-based RAG application for asking grounded questions about uploaded PDF documents. Each person signs in with Supabase, receives isolated local document/vector storage, and has their chat history saved to their own Supabase account.
 
-## Approach
+## What it does
 
-1. **Document ingestion** (`ingest.py`) — PDFs in `data/` are loaded with
-   `PyPDFLoader`, split into ~800-character chunks with 150-character overlap
-   using `RecursiveCharacterTextSplitter`, embedded with the free local
-   `sentence-transformers/all-MiniLM-L6-v2` model, and stored in a persistent
-   **Chroma** vector store.
-2. **Retrieval + generation** (`rag_chain.py`) — a user's question is embedded
-   with the same model, the top-k most similar chunks are retrieved from
-   Chroma, and passed as context to **Gemini 1.5 Flash** along with a strict
-   prompt instructing it to answer only from the given context.
-3. **Interface** (`app.py`) — a Streamlit chat interface that accepts
-   questions, displays generated answers, keeps conversation history for the
-   session, and shows the exact source chunks each answer was grounded in.
+- Creates accounts and signs users in with Supabase Auth.
+- Lets each signed-in user upload one or more PDFs from the sidebar.
+- Extracts PDF pages and creates semantic chunks (roughly 350-1,200 characters) using local MiniLM embeddings.
+- Stores embeddings in a persistent, user-specific Chroma collection.
+- Retrieves direct matches plus diverse MMR results, then asks Gemini to answer only from the retrieved context.
+- Shows the source file, page, section, relevance score (when available), and excerpt for every answer.
+- Persists questions, answers, and source metadata in Supabase so a user's history is restored after they sign in again.
+- Allows users to remove an uploaded PDF and its corresponding indexed chunks.
+
+## Architecture
+
+| Component | Role |
+| --- | --- |
+| `app.py` | Streamlit UI, authentication flow, upload/remove controls, and chat display. |
+| `database.py` | Supabase Auth plus per-user chat-message reads and writes. |
+| `ingest.py` | PDF loading, semantic chunking, MiniLM embeddings, and persistent Chroma storage. |
+| `rag_chain.py` | Vector retrieval, context construction, and Gemini answer generation. |
+| `supabase_schema.sql` | `chat_messages` table, index, RLS, and per-user policies. |
+
+Documents and Chroma data are stored locally in `data/users/<user-id>/` and `chroma_db/users/<user-id>/`. Chat history is stored remotely in Supabase.
+
+## Prerequisites
+
+- Python 3.10 or newer
+- A [Supabase](https://supabase.com/) project
+- A Google AI Studio API key for Gemini
 
 ## Setup
 
+1. Install dependencies.
+
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Create the Supabase database table.
+
+   In the Supabase dashboard, open **SQL Editor**, paste the contents of `supabase_schema.sql`, and run it. This creates `chat_messages`, enables Row Level Security, and grants signed-in users access only to their own messages.
+
+3. Configure Supabase Auth.
+
+   In the Supabase dashboard, enable the Email provider under **Authentication -> Providers**. If email confirmation is enabled, new users must confirm their email before signing in.
+
+4. Create a `.env` file from the example.
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   On Windows PowerShell:
+
+   ```powershell
+   Copy-Item .env.example .env
+   ```
+
+   Set these values in `.env`:
+
+   ```dotenv
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_PUBLISHABLE_KEY=your-publishable-key
+   GOOGLE_API_KEY=your-google-ai-studio-key
+   ```
+
+   Use the project's **publishable** key (or legacy `anon` key), never a Supabase `service_role` or secret key.
+
+   Alternatively, configure Supabase in Streamlit secrets using either root-level keys or the local connection layout:
+
+   ```toml
+   [connections.supabase]
+   SUPABASE_URL = "https://your-project.supabase.co"
+   SUPABASE_PUBLISHABLE_KEY = "your-publishable-key"
+   ```
+
+5. Start the app.
+
+   ```bash
+   streamlit run app.py
+   ```
+
+6. Create an account, sign in, add PDFs in the sidebar, select **Process documents**, and start asking questions. If `GOOGLE_API_KEY` is not in `.env`, enter it in the sidebar for the current session.
+
+## Retrieval behavior
+
+The app uses `sentence-transformers/all-MiniLM-L6-v2` locally for both indexing and querying. It keeps chunk IDs stable, so reprocessing the same content does not add duplicate vectors. For each question it retrieves up to 20 direct matches, retains the best four, then adds diverse results using maximal marginal relevance, up to eight source chunks total. Gemini (`gemini-3.6-flash`) generates the final response with a prompt that requires it to stay within that context.
+
+## Notes and limitations
+
+- Document vectors and PDFs remain on the machine running the app; they are not stored in Supabase.
+- Initial local embedding-model download and indexing can take time, especially for large PDFs.
+- The current ingestion work happens during the Streamlit request. Large-document background processing is not implemented yet.
+- Keep `.env` and `.streamlit/secrets.toml` private; both are ignored by Git.
+
+## Development checks
+
 ```bash
-pip install -r requirements.txt
-
-# add your PDF(s) to the data/ folder, then:
-python ingest.py
-
-# set your free Gemini API key (https://aistudio.google.com/apikey)
-export GOOGLE_API_KEY=your_key_here   # or paste it into the sidebar
-
-streamlit run app.py
+python -m py_compile app.py database.py ingest.py rag_chain.py
 ```
 
-## Design decisions
+## AI-use disclosure
 
-- **Chroma over FAISS/Pinecone**: simplest to set up locally with zero
-  external dependencies, persists to disk automatically.
-- **Local embeddings (MiniLM) over API embeddings**: free, fast, no rate
-  limits — keeps the pipeline usable without any paid service.
-- **Gemini 1.5 Flash**: free tier available, fast inference, good enough
-  quality for grounded Q&A over a small document set.
-- **Strict grounding prompt**: the model is explicitly instructed to say it
-  doesn't know rather than hallucinate when the answer isn't in the
-  retrieved context — directly addresses the "answers primarily based on
-  the provided knowledge source" requirement.
-
-## Bonus features implemented
-
-- ✅ Source citations (expandable per-answer, shows file + page + excerpt)
-- ✅ Conversation history (persists for the Streamlit session)
-- ⬜ Multi-document support (already works — just drop more PDFs in `data/`
-  before running `ingest.py`)
-- ⬜ Deployment (not done — can be deployed to Streamlit Community Cloud if
-  needed)
-
-## Results
-
-*(Fill in after testing: 3-5 example questions, the answers generated, and
-whether they were correctly grounded in the source documents.)*
-
-## AI tool disclosure
-
-This project was built with assistance from Claude (Anthropic) for code
-scaffolding, architecture decisions, and documentation.
+AI tools were used to assist with code scaffolding, architecture discussions, debugging, and documentation. The application code, configuration, and project behavior were reviewed and adapted for this repository.
