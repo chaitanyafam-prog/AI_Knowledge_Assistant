@@ -18,15 +18,15 @@ from supabase import create_client
 
 # 1. Look for keys in Streamlit Secrets (Production) first, fall back to environment variables (Local)
 SUPABASE_URL = st.secrets.get("SUPABASE_URL") or os.environ.get("SUPABASE_URL")
-SUPABASE_PUBLISHABLE_KEY = st.secrets.get("SUPABASE_PUBLISHABLE_KEY") or os.environ.get("SUPABASE_PUBLISHABLE_KEY")
+SUPABASE_KEY = st.secrets.get("SUPABASE_KEY") or os.environ.get("SUPABASE_KEY")
 
 # 2. Verify that credentials actually exist
-if not SUPABASE_URL or not SUPABASE_PUBLISHABLE_KEY:
+if not SUPABASE_URL or not SUPABASE_KEY:
     st.error("🔒 Supabase credentials are missing. Please configure them in your settings.")
     st.stop()  # Safely halts the app instead of crashing completely
 
 # 3. Initialize client
-supabase = create_client(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 load_dotenv()
 st.set_page_config(page_title="Mini AI Knowledge Assistant", page_icon="📚", layout="wide")
